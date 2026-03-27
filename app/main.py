@@ -82,6 +82,28 @@ NUMBER_WORDS = {
     "third": 3,
 }
 
+WORD_ALIASES = {
+    "vs": "verse_sep",
+    "v": "verse_sep",
+    "verse": "verse_sep",
+    "verses": "verse_sep",
+    "this": "verse_sep",
+    "to": "two",
+    "too": "two",
+    "for": "four",
+    "fore": "four",
+    "ate": "eight",
+    "won": "one",
+    "once": "one",
+    "tree": "three",
+    "free": "three",
+    "sex": "six",
+    "sicks": "six",
+    "seaven": "seven",
+    "ohh": "oh",
+    "o": "oh",
+}
+
 BOOK_ALIASES = [
     "Genesis",
     "Exodus",
@@ -179,10 +201,13 @@ def normalize_reference(text):
     i = 0
     while i < len(tokens):
         t = tokens[i]
-        if t in ("vs", "verse", "verses"):
+        alias = WORD_ALIASES.get(t)
+        if alias == "verse_sep":
             out.append(":")
             i += 1
             continue
+        if alias:
+            t = alias
         if t.isdigit() or t == ":":
             out.append(t)
             i += 1
