@@ -82,6 +82,77 @@ NUMBER_WORDS = {
     "third": 3,
 }
 
+BOOK_ALIASES = [
+    "Genesis",
+    "Exodus",
+    "Leviticus",
+    "Numbers",
+    "Deuteronomy",
+    "Joshua",
+    "Judges",
+    "Ruth",
+    "1 Samuel",
+    "2 Samuel",
+    "1 Kings",
+    "2 Kings",
+    "1 Chronicles",
+    "2 Chronicles",
+    "Ezra",
+    "Nehemiah",
+    "Esther",
+    "Job",
+    "Psalms",
+    "Proverbs",
+    "Ecclesiastes",
+    "Song of Solomon",
+    "Isaiah",
+    "Jeremiah",
+    "Lamentations",
+    "Ezekiel",
+    "Daniel",
+    "Hosea",
+    "Joel",
+    "Amos",
+    "Obadiah",
+    "Jonah",
+    "Micah",
+    "Nahum",
+    "Habakkuk",
+    "Zephaniah",
+    "Haggai",
+    "Zechariah",
+    "Malachi",
+    "Matthew",
+    "Mark",
+    "Luke",
+    "John",
+    "Acts",
+    "Romans",
+    "1 Corinthians",
+    "2 Corinthians",
+    "Galatians",
+    "Ephesians",
+    "Philippians",
+    "Colossians",
+    "1 Thessalonians",
+    "2 Thessalonians",
+    "1 Timothy",
+    "2 Timothy",
+    "Titus",
+    "Philemon",
+    "Hebrews",
+    "James",
+    "1 Peter",
+    "2 Peter",
+    "1 John",
+    "2 John",
+    "3 John",
+    "Jude",
+    "Revelation",
+]
+
+BOOK_TOKENS = [normalize_book_key(b) for b in BOOK_ALIASES]
+
 
 def words_to_number(seq):
     total = 0
@@ -110,6 +181,10 @@ def normalize_reference(text):
     i = 0
     while i < len(tokens):
         t = tokens[i]
+        if t in ("vs", "verse", "verses"):
+            out.append(":")
+            i += 1
+            continue
         if t.isdigit() or t == ":":
             out.append(t)
             i += 1
@@ -150,6 +225,20 @@ def parse_reference(reference):
     verse_end = match.group("verse_end")
     verse_end = int(verse_end) if verse_end else None
     return book, chapter, verse, verse_end
+
+
+def best_book_match(raw_book):
+    from difflib import get_close_matches
+
+    key = normalize_book_key(raw_book)
+    if key in BOOK_TOKENS:
+        idx = BOOK_TOKENS.index(key)
+        return BOOK_ALIASES[idx]
+    matches = get_close_matches(key, BOOK_TOKENS, n=1, cutoff=0.6)
+    if not matches:
+        return raw_book
+    idx = BOOK_TOKENS.index(matches[0])
+    return BOOK_ALIASES[idx]
 
 
 class Recorder:
@@ -513,7 +602,13 @@ def main():
             if translation in RESTRICTED_TRANSLATIONS:
                 set_status("Note: NIV/MSG/NLT/GNT/ESV require licensed APIs; may fail here")
             try:
-                ref, tname, text = fetch_verse(reference, translation)
+                book, chapter, verse, verse_end = parse_reference(reference)
+                book = best_book_match(book)
+                if verse_end:
+                    corrected = f"{book} {chapter}:{verse}-{verse_end}"
+                else:
+                    corrected = f"{book} {chapter}:{verse}"
+                ref, tname, text = fetch_verse(corrected, translation)
                 output.insert("end", f"{ref} ({tname})\n\n{text}")
                 set_status("Fetched")
             except Exception as e:
@@ -534,6 +629,7 @@ def main():
                 books = api_bible_list_books(api_key, bible_id)
                 books_cache[bible_id] = build_book_map(books)
             book_name, chapter, verse, verse_end = parse_reference(reference)
+            book_name = best_book_match(book_name)
             book_id = books_cache[bible_id].get(normalize_book_key(book_name))
             if not book_id:
                 raise ValueError(f"Book not found: {book_name}")
