@@ -1,3 +1,4 @@
+import html
 import json
 import os
 import queue
@@ -14,6 +15,7 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(APP_DIR, ".."))
 MODEL_DIR = os.path.join(ROOT_DIR, "models", "vosk-model-small-en-us-0.15")
 API_URL = "https://bible-api.com/"
+API_BIBLE_BASE = "https://api.scripture.api.bible/v1"
 
 TRANSLATIONS = [
     "kjv",
@@ -121,6 +123,23 @@ def normalize_reference(text):
     return s
 
 
+def normalize_book_key(text):
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def parse_reference(reference):
+    ref = normalize_reference(reference)
+    match = re.match(r"^(?P<book>.+?)\s+(?P<chapter>\d+)\s*:\s*(?P<verse>\d+)(?:\s*-\s*(?P<verse_end>\d+))?$", ref)
+    if not match:
+        raise ValueError("Use format like: John 3:16 or 1 John 3:16")
+    book = match.group("book").strip()
+    chapter = int(match.group("chapter"))
+    verse = int(match.group("verse"))
+    verse_end = match.group("verse_end")
+    verse_end = int(verse_end) if verse_end else None
+    return book, chapter, verse, verse_end
+
+
 class Recorder:
     def __init__(self, on_partial, on_final, on_error):
         self.on_partial = on_partial
@@ -207,6 +226,70 @@ def fetch_verse(reference, translation):
     return ref, translation_name, text
 
 
+def api_bible_headers(api_key):
+    return {"api-key": api_key}
+
+
+def api_bible_list_bibles(api_key):
+    r = requests.get(f"{API_BIBLE_BASE}/bibles", headers=api_bible_headers(api_key), timeout=15)
+    if r.status_code != 200:
+        raise ValueError(f"API.Bible error ({r.status_code}): {r.text}")
+    data = r.json()
+    return data.get("data", [])
+
+
+def api_bible_list_books(api_key, bible_id):
+    r = requests.get(
+        f"{API_BIBLE_BASE}/bibles/{bible_id}/books",
+        headers=api_bible_headers(api_key),
+        timeout=15,
+    )
+    if r.status_code != 200:
+        raise ValueError(f"API.Bible error ({r.status_code}): {r.text}")
+    data = r.json()
+    return data.get("data", [])
+
+
+def build_book_map(books):
+    book_map = {}
+    for b in books:
+        book_id = b.get("id")
+        for key in [
+            b.get("name"),
+            b.get("nameLong"),
+            b.get("abbreviation"),
+            b.get("abbreviationLocal"),
+        ]:
+            if key:
+                book_map[normalize_book_key(key)] = book_id
+    return book_map
+
+
+def api_bible_fetch_passage(api_key, bible_id, passage_id):
+    params = {
+        "content-type": "text",
+        "include-notes": "false",
+        "include-titles": "false",
+        "include-verse-numbers": "false",
+        "include-chapter-numbers": "false",
+        "include-verse-spans": "false",
+    }
+    r = requests.get(
+        f"{API_BIBLE_BASE}/bibles/{bible_id}/passages/{passage_id}",
+        headers=api_bible_headers(api_key),
+        params=params,
+        timeout=15,
+    )
+    if r.status_code != 200:
+        raise ValueError(f"API.Bible error ({r.status_code}): {r.text}")
+    data = r.json().get("data", {})
+    content = data.get("content", "")
+    content = html.unescape(re.sub(r"<[^>]+>", "", content)).strip()
+    reference = data.get("reference", passage_id)
+    copyright_text = data.get("copyright", "")
+    return reference, content, copyright_text
+
+
 def main():
     root = tk.Tk()
     root.title("Let There Be - Voice Bible")
@@ -230,6 +313,29 @@ def main():
     translation_var = tk.StringVar(value=TRANSLATIONS[0])
     translation_box = ttk.Combobox(frame, textvariable=translation_var, values=TRANSLATIONS, state="normal")
     translation_box.pack(fill="x", pady=4)
+
+    ttk.Label(frame, text="Provider:").pack(anchor="w", pady=(8, 0))
+    provider_var = tk.StringVar(value="public")
+    provider_frame = ttk.Frame(frame)
+    provider_frame.pack(fill="x", pady=4)
+    ttk.Radiobutton(provider_frame, text="Public API (bible-api.com)", variable=provider_var, value="public").pack(
+        side="left"
+    )
+    ttk.Radiobutton(provider_frame, text="API.Bible (licensed)", variable=provider_var, value="api_bible").pack(
+        side="left", padx=12
+    )
+
+    ttk.Label(frame, text="API.Bible key:").pack(anchor="w")
+    api_key_var = tk.StringVar(value=os.environ.get("API_BIBLE_KEY", ""))
+    api_key_entry = ttk.Entry(frame, textvariable=api_key_var, show="*")
+    api_key_entry.pack(fill="x", pady=4)
+
+    ttk.Label(frame, text="API.Bible translation (Bible ID):").pack(anchor="w")
+    bible_display_var = tk.StringVar()
+    bible_box = ttk.Combobox(frame, textvariable=bible_display_var, values=[], state="readonly")
+    bible_box.pack(fill="x", pady=4)
+    load_bibles_btn = ttk.Button(frame, text="Load Bibles")
+    load_bibles_btn.pack(anchor="w", pady=(0, 6))
 
     status_var = tk.StringVar(value="Ready")
     status_label = ttk.Label(frame, textvariable=status_var)
@@ -258,6 +364,9 @@ def main():
         root.after(0, lambda: set_status(f"Error: {msg}"))
 
     recorder = Recorder(on_partial, on_final, on_error)
+    bibles_map = {}
+    bibles_info = {}
+    books_cache = {}
 
     def start_recording():
         set_status("Listening...")
@@ -267,16 +376,86 @@ def main():
         recorder.stop()
         set_status("Stopping...")
 
+    def toggle_provider_state():
+        is_public = provider_var.get() == "public"
+        translation_box.configure(state="normal" if is_public else "disabled")
+        api_key_entry.configure(state="disabled" if is_public else "normal")
+        bible_box.configure(state="disabled" if is_public else "readonly")
+        load_bibles_btn.configure(state="disabled" if is_public else "normal")
+
+    def load_bibles():
+        api_key = api_key_var.get().strip()
+        if not api_key:
+            set_status("Enter API.Bible key first")
+            return
+        try:
+            bibles = api_bible_list_bibles(api_key)
+            bibles_map.clear()
+            bibles_info.clear()
+            options = []
+            for b in bibles:
+                name = b.get("name", "Unknown")
+                abbr = b.get("abbreviationLocal") or b.get("abbreviation") or ""
+                display = f"{name} ({abbr})" if abbr else name
+                b_id = b.get("id")
+                if b_id:
+                    bibles_map[display] = b_id
+                    bibles_info[b_id] = b
+                    options.append(display)
+            options.sort()
+            bible_box.configure(values=options)
+            if options:
+                bible_display_var.set(options[0])
+                set_status("Loaded API.Bible translations")
+            else:
+                set_status("No bibles returned for this key")
+        except Exception as e:
+            set_status(str(e))
+
+    load_bibles_btn.configure(command=load_bibles)
+
     def fetch():
         output.delete("1.0", "end")
         reference = ref_var.get().strip()
-        translation = translation_var.get().strip().lower()
-        if translation in RESTRICTED_TRANSLATIONS:
-            set_status("Note: NIV/MSG/NLT/GNT/ESV require licensed APIs; may fail here")
+        provider = provider_var.get()
+        if provider == "public":
+            translation = translation_var.get().strip().lower()
+            if translation in RESTRICTED_TRANSLATIONS:
+                set_status("Note: NIV/MSG/NLT/GNT/ESV require licensed APIs; may fail here")
+            try:
+                ref, tname, text = fetch_verse(reference, translation)
+                output.insert("end", f"{ref} ({tname})\n\n{text}")
+                set_status("Fetched")
+            except Exception as e:
+                set_status(str(e))
+            return
+
+        api_key = api_key_var.get().strip()
+        if not api_key:
+            set_status("API.Bible key is required")
+            return
+        display = bible_display_var.get().strip()
+        bible_id = bibles_map.get(display)
+        if not bible_id:
+            set_status("Select a Bible ID (click Load Bibles)")
+            return
         try:
-            ref, tname, text = fetch_verse(reference, translation)
-            output.insert("end", f"{ref} ({tname})\n\n{text}")
-            set_status("Fetched")
+            if bible_id not in books_cache:
+                books = api_bible_list_books(api_key, bible_id)
+                books_cache[bible_id] = build_book_map(books)
+            book_name, chapter, verse, verse_end = parse_reference(reference)
+            book_id = books_cache[bible_id].get(normalize_book_key(book_name))
+            if not book_id:
+                raise ValueError(f"Book not found: {book_name}")
+            if verse_end:
+                passage_id = f"{book_id}.{chapter}.{verse}-{book_id}.{chapter}.{verse_end}"
+            else:
+                passage_id = f"{book_id}.{chapter}.{verse}"
+            ref, text, copyright_text = api_bible_fetch_passage(api_key, bible_id, passage_id)
+            output.insert("end", f"{ref}\n\n{text}")
+            if copyright_text:
+                output.insert("end", f"\n\n{copyright_text}")
+            set_status("Fetched (API.Bible)")
         except Exception as e:
             set_status(str(e))
 
@@ -286,6 +465,9 @@ def main():
     ttk.Button(btn_frame, text="Start Recording", command=start_recording).pack(side="left", padx=4)
     ttk.Button(btn_frame, text="Stop", command=stop_recording).pack(side="left", padx=4)
     ttk.Button(btn_frame, text="Fetch Verse", command=fetch).pack(side="left", padx=4)
+
+    toggle_provider_state()
+    provider_var.trace_add("write", lambda *_: toggle_provider_state())
 
     root.mainloop()
 

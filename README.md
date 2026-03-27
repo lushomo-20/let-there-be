@@ -33,4 +33,11 @@ python app\main.py
 - The app uses `https://bible-api.com/` for public-domain text.
 - The Vosk model is intentionally **not** committed to the repo (see `.gitignore`).
 - If recognition is imperfect, edit the recognized reference before fetching.
-- NIV / MSG / NLT / GNT / ESV are copyrighted and typically require licensed APIs. With the current API, those may fail unless you wire in a licensed provider.
+- NIV / MSG / NLT / GNT / ESV are copyrighted and require licensed APIs.
+
+## API.Bible (Licensed)
+The app supports API.Bible for licensed translations.
+
+1. Get an API key from API.Bible.
+2. In the app, choose `API.Bible (licensed)`, paste your key, then click `Load Bibles`.
+3. Select a Bible from the list and fetch verses normally.
