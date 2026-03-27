@@ -58,7 +58,14 @@ pip install pyinstaller
 3. Build:
 
 ```bash
-pyinstaller --noconfirm --onefile --windowed --name "LetThereBe" app\main.py
+pyinstaller --noconfirm --onefile --windowed --name "LetThereBe" --collect-binaries vosk --collect-submodules vosk app\main.py
 ```
 
-The executable will be in `dist\LetThereBe.exe`.
+4. Copy the Vosk model next to the EXE:
+
+```bash
+mkdir dist\models
+xcopy models\vosk-model-small-en-us-0.15 dist\models\vosk-model-small-en-us-0.15 /E /I /Y
+```
+
+The executable will be in `dist\LetThereBe.exe`. The model must be located in `dist\models\vosk-model-small-en-us-0.15`.

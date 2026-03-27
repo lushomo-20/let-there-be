@@ -3,6 +3,7 @@ import json
 import os
 import queue
 import re
+import sys
 import threading
 import tkinter as tk
 from tkinter import ttk
@@ -13,7 +14,15 @@ from vosk import Model, KaldiRecognizer
 
 APP_NAME = "LetThereBe"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.abspath(os.path.join(APP_DIR, ".."))
+
+
+def get_root_dir():
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.abspath(os.path.join(APP_DIR, ".."))
+
+
+ROOT_DIR = get_root_dir()
 MODEL_DIR = os.path.join(ROOT_DIR, "models", "vosk-model-small-en-us-0.15")
 API_URL = "https://bible-api.com/"
 API_BIBLE_BASE = "https://api.scripture.api.bible/v1"
@@ -312,15 +321,43 @@ def api_bible_fetch_passage(api_key, bible_id, passage_id):
 def main():
     root = tk.Tk()
     root.title("Let There Be - Voice Bible")
-    root.geometry("700x520")
+    root.geometry("760x720")
+    root.minsize(760, 650)
+
+    container = ttk.Frame(root)
+    container.pack(fill="both", expand=True)
+
+    canvas = tk.Canvas(container, highlightthickness=0)
+    vscroll = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+    canvas.configure(yscrollcommand=vscroll.set)
+    vscroll.pack(side="right", fill="y")
+    canvas.pack(side="left", fill="both", expand=True)
+
+    content = ttk.Frame(canvas)
+    canvas_window = canvas.create_window((0, 0), window=content, anchor="nw")
+
+    def on_content_configure(event):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+        canvas.itemconfigure(canvas_window, width=canvas.winfo_width())
+
+    def on_canvas_configure(event):
+        canvas.itemconfigure(canvas_window, width=event.width)
+
+    content.bind("<Configure>", on_content_configure)
+    canvas.bind("<Configure>", on_canvas_configure)
+
+    def on_mousewheel(event):
+        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    canvas.bind_all("<MouseWheel>", on_mousewheel)
 
     style = ttk.Style(root)
     style.theme_use("clam")
 
-    header = ttk.Label(root, text="Let There Be", font=("Segoe UI", 18, "bold"))
+    header = ttk.Label(content, text="Let There Be", font=("Segoe UI", 18, "bold"))
     header.pack(pady=10)
 
-    frame = ttk.Frame(root)
+    frame = ttk.Frame(content)
     frame.pack(fill="x", padx=16)
 
     ttk.Label(frame, text="Spoken / recognized reference:").pack(anchor="w")
@@ -349,8 +386,12 @@ def main():
     api_key_var = tk.StringVar(value=config.get("api_bible_key", os.environ.get("API_BIBLE_KEY", "")))
     api_key_entry = ttk.Entry(frame, textvariable=api_key_var, show="*")
     api_key_entry.pack(fill="x", pady=4)
-    save_key_btn = ttk.Button(frame, text="Save Key")
-    save_key_btn.pack(anchor="w", pady=(0, 6))
+    key_btns = ttk.Frame(frame)
+    key_btns.pack(anchor="w", pady=(0, 6))
+    save_key_btn = ttk.Button(key_btns, text="Save Key")
+    save_key_btn.pack(side="left")
+    test_key_btn = ttk.Button(key_btns, text="Test Key")
+    test_key_btn.pack(side="left", padx=6)
 
     ttk.Label(frame, text="API.Bible translation (Bible ID):").pack(anchor="w")
     bible_display_var = tk.StringVar()
@@ -363,7 +404,7 @@ def main():
     status_label = ttk.Label(frame, textvariable=status_var)
     status_label.pack(anchor="w", pady=6)
 
-    output = tk.Text(root, wrap="word", height=15)
+    output = tk.Text(content, wrap="word", height=12)
     output.pack(fill="both", expand=True, padx=16, pady=8)
 
     def set_status(msg):
@@ -417,6 +458,20 @@ def main():
         set_status(f"Saved API.Bible key to {CONFIG_FILE}")
 
     save_key_btn.configure(command=save_key)
+
+    def test_key():
+        key = api_key_var.get().strip()
+        if not key:
+            set_status("API.Bible key is empty")
+            return
+        try:
+            bibles = api_bible_list_bibles(key)
+            count = len(bibles)
+            set_status(f"API.Bible key OK ({count} bibles)")
+        except Exception as e:
+            set_status(f"API.Bible key failed: {e}")
+
+    test_key_btn.configure(command=test_key)
 
     def load_bibles():
         api_key = api_key_var.get().strip()
@@ -494,7 +549,7 @@ def main():
         except Exception as e:
             set_status(str(e))
 
-    btn_frame = ttk.Frame(root)
+    btn_frame = ttk.Frame(content)
     btn_frame.pack(pady=6)
 
     ttk.Button(btn_frame, text="Start Recording", command=start_recording).pack(side="left", padx=4)
