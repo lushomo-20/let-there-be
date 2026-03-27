@@ -11,11 +11,14 @@ import requests
 import sounddevice as sd
 from vosk import Model, KaldiRecognizer
 
+APP_NAME = "LetThereBe"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(APP_DIR, ".."))
 MODEL_DIR = os.path.join(ROOT_DIR, "models", "vosk-model-small-en-us-0.15")
 API_URL = "https://bible-api.com/"
 API_BIBLE_BASE = "https://api.scripture.api.bible/v1"
+CONFIG_DIR = os.path.join(os.environ.get("APPDATA", ROOT_DIR), APP_NAME)
+CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
 TRANSLATIONS = [
     "kjv",
@@ -230,6 +233,22 @@ def api_bible_headers(api_key):
     return {"api-key": api_key}
 
 
+def load_config():
+    try:
+        if not os.path.isfile(CONFIG_FILE):
+            return {}
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_config(data):
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
 def api_bible_list_bibles(api_key):
     r = requests.get(f"{API_BIBLE_BASE}/bibles", headers=api_bible_headers(api_key), timeout=15)
     if r.status_code != 200:
@@ -326,9 +345,12 @@ def main():
     )
 
     ttk.Label(frame, text="API.Bible key:").pack(anchor="w")
-    api_key_var = tk.StringVar(value=os.environ.get("API_BIBLE_KEY", ""))
+    config = load_config()
+    api_key_var = tk.StringVar(value=config.get("api_bible_key", os.environ.get("API_BIBLE_KEY", "")))
     api_key_entry = ttk.Entry(frame, textvariable=api_key_var, show="*")
     api_key_entry.pack(fill="x", pady=4)
+    save_key_btn = ttk.Button(frame, text="Save Key")
+    save_key_btn.pack(anchor="w", pady=(0, 6))
 
     ttk.Label(frame, text="API.Bible translation (Bible ID):").pack(anchor="w")
     bible_display_var = tk.StringVar()
@@ -382,6 +404,19 @@ def main():
         api_key_entry.configure(state="disabled" if is_public else "normal")
         bible_box.configure(state="disabled" if is_public else "readonly")
         load_bibles_btn.configure(state="disabled" if is_public else "normal")
+        save_key_btn.configure(state="disabled" if is_public else "normal")
+
+    def save_key():
+        key = api_key_var.get().strip()
+        if not key:
+            set_status("API.Bible key is empty")
+            return
+        data = load_config()
+        data["api_bible_key"] = key
+        save_config(data)
+        set_status(f"Saved API.Bible key to {CONFIG_FILE}")
+
+    save_key_btn.configure(command=save_key)
 
     def load_bibles():
         api_key = api_key_var.get().strip()

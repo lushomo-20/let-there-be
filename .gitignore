@@ -5,6 +5,10 @@ __pycache__/
 # Models
 models/
 *.zip
+# Build artifacts
+build/
+dist/
+*.spec
 # OS
 .DS_Store
 Thumbs.db

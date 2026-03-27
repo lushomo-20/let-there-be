@@ -41,3 +41,24 @@ The app supports API.Bible for licensed translations.
 1. Get an API key from API.Bible.
 2. In the app, choose `API.Bible (licensed)`, paste your key, then click `Load Bibles`.
 3. Select a Bible from the list and fetch verses normally.
+
+## Build EXE (Windows)
+1. Activate the venv:
+
+```bash
+.\.venv\Scripts\activate
+```
+
+2. Install PyInstaller:
+
+```bash
+pip install pyinstaller
+```
+
+3. Build:
+
+```bash
+pyinstaller --noconfirm --onefile --windowed --name "LetThereBe" app\main.py
+```
+
+The executable will be in `dist\LetThereBe.exe`.
