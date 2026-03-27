@@ -151,8 +151,6 @@ BOOK_ALIASES = [
     "Revelation",
 ]
 
-BOOK_TOKENS = [normalize_book_key(b) for b in BOOK_ALIASES]
-
 
 def words_to_number(seq):
     total = 0
@@ -212,6 +210,9 @@ def normalize_reference(text):
 
 def normalize_book_key(text):
     return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+BOOK_TOKENS = [normalize_book_key(b) for b in BOOK_ALIASES]
 
 
 def parse_reference(reference):
