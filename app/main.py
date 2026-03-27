@@ -469,23 +469,23 @@ def main():
     style = ttk.Style(root)
     style.theme_use("clam")
 
-    header = ttk.Label(content, text="Let There Be", font=("Segoe UI", 18, "bold"))
+    header = ttk.Label(content, text="Let There Be", font=("Segoe UI", 22, "bold"))
     header.pack(pady=10)
 
     frame = ttk.Frame(content)
     frame.pack(fill="x", padx=16)
 
-    ttk.Label(frame, text="Spoken / recognized reference:").pack(anchor="w")
+    ttk.Label(frame, text="Spoken / recognized reference:", font=("Segoe UI", 11, "bold")).pack(anchor="w")
     ref_var = tk.StringVar()
-    ref_entry = ttk.Entry(frame, textvariable=ref_var)
+    ref_entry = ttk.Entry(frame, textvariable=ref_var, font=("Segoe UI", 12))
     ref_entry.pack(fill="x", pady=4)
 
-    ttk.Label(frame, text="Translation (public domain by default):").pack(anchor="w")
+    ttk.Label(frame, text="Translation (public domain by default):", font=("Segoe UI", 11, "bold")).pack(anchor="w")
     translation_var = tk.StringVar(value=TRANSLATIONS[0])
-    translation_box = ttk.Combobox(frame, textvariable=translation_var, values=TRANSLATIONS, state="normal")
+    translation_box = ttk.Combobox(frame, textvariable=translation_var, values=TRANSLATIONS, state="normal", font=("Segoe UI", 12))
     translation_box.pack(fill="x", pady=4)
 
-    ttk.Label(frame, text="Provider:").pack(anchor="w", pady=(8, 0))
+    ttk.Label(frame, text="Provider:", font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(8, 0))
     provider_var = tk.StringVar(value="public")
     provider_frame = ttk.Frame(frame)
     provider_frame.pack(fill="x", pady=4)
@@ -496,10 +496,10 @@ def main():
         side="left", padx=12
     )
 
-    ttk.Label(frame, text="API.Bible key:").pack(anchor="w")
+    ttk.Label(frame, text="API.Bible key:", font=("Segoe UI", 11, "bold")).pack(anchor="w")
     config = load_config()
     api_key_var = tk.StringVar(value=config.get("api_bible_key", os.environ.get("API_BIBLE_KEY", "")))
-    api_key_entry = ttk.Entry(frame, textvariable=api_key_var, show="*")
+    api_key_entry = ttk.Entry(frame, textvariable=api_key_var, show="*", font=("Segoe UI", 12))
     api_key_entry.pack(fill="x", pady=4)
     key_btns = ttk.Frame(frame)
     key_btns.pack(anchor="w", pady=(0, 6))
@@ -508,18 +508,18 @@ def main():
     test_key_btn = ttk.Button(key_btns, text="Test Key")
     test_key_btn.pack(side="left", padx=6)
 
-    ttk.Label(frame, text="API.Bible translation (Bible ID):").pack(anchor="w")
+    ttk.Label(frame, text="API.Bible translation (Bible ID):", font=("Segoe UI", 11, "bold")).pack(anchor="w")
     bible_display_var = tk.StringVar()
-    bible_box = ttk.Combobox(frame, textvariable=bible_display_var, values=[], state="readonly")
+    bible_box = ttk.Combobox(frame, textvariable=bible_display_var, values=[], state="readonly", font=("Segoe UI", 12))
     bible_box.pack(fill="x", pady=4)
     load_bibles_btn = ttk.Button(frame, text="Load Bibles")
     load_bibles_btn.pack(anchor="w", pady=(0, 6))
 
     status_var = tk.StringVar(value="Ready")
-    status_label = ttk.Label(frame, textvariable=status_var)
+    status_label = ttk.Label(frame, textvariable=status_var, font=("Segoe UI", 11))
     status_label.pack(anchor="w", pady=6)
 
-    output = tk.Text(content, wrap="word", height=12)
+    output = tk.Text(content, wrap="word", height=12, font=("Segoe UI", 12))
     output.pack(fill="both", expand=True, padx=16, pady=8)
 
     def set_status(msg):
